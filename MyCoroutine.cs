@@ -8,16 +8,19 @@ public static class MyCoroutine
 {
     public static int StartContinueCoroutine(this GameObject go, IEnumerator ie)
     {
+        if (GameMain.IsPlaying == false) return 0;
         return MyCoroutineMono.instance.StartMyCoroutine(go, ie);
     }
 
     public static void StopContinueCoroutineById(this GameObject go, int id)
     {
+        if (GameMain.IsPlaying == false) return;
         MyCoroutineMono.instance.StopMyCoroutineById(id);
     }
 
     public static void StopContinueCoroutineByGo(this GameObject go)
     {
+        if (GameMain.IsPlaying == false) return;
         MyCoroutineMono.instance.StopMyCoroutineByGo(go);
     }
 
@@ -37,10 +40,10 @@ public static class MyCoroutine
                 return m;
             }
         }
-        static MyCoroutineMono m = null;
+        static MyCoroutineMono m;
 
         int coroutineId = 0;
-
+        int coroutineCount = 0;
         struct Data
         {
             public bool die;
@@ -60,11 +63,11 @@ public static class MyCoroutine
                 {
                     return;
                 }
-                if (delayTime > 0)
+                if (delayTime >= 0)
                 {
                     delayTime -= Time.deltaTime;
                 }
-                if (delayTime > 0) return;
+                if (delayTime >= 0) return;
                 if (ie.MoveNext() == false)
                 {
                     die = true;
@@ -96,15 +99,21 @@ public static class MyCoroutine
                 var data = dataList[i];
                 data.Upt();
                 dataList[i] = data;
-                if (data.die)
+            }
+            for (int i = 0; i < dataList.Count; i++)
+            {
+                if (dataList[i].die)
                 {
                     dataList.RemoveAt(i);
+                    i--;
                 }
             }
+
             if (dataList.Count == 0)
             {
                 enabled = false;
             }
+            coroutineCount = dataList.Count;
         }
 
         public int StartMyCoroutine(GameObject go, IEnumerator ie)
@@ -123,9 +132,11 @@ public static class MyCoroutine
         {
             for (int i = 0; i < dataList.Count; i++)
             {
-                if (dataList[i].id == id)
+                var data = dataList[i];
+                if (data.id == id)
                 {
-                    dataList.RemoveAt(i);
+                    data.die = true;
+                    dataList[i] = data;
                     return;
                 }
             }
@@ -135,16 +146,22 @@ public static class MyCoroutine
         {
             for (int i = 0; i < dataList.Count; i++)
             {
-                if (dataList[i].go == go)
+                var data = dataList[i];
+                if (data.go == go)
                 {
-                    dataList.RemoveAt(i);
-                    i--;
+                    data.die = true;
                 }
             }
         }
 
-        int getId() {
+        int getId() 
+        {
             return coroutineId++;
+        }
+
+        public int GetCoroutineCount()
+        {
+            return coroutineCount;
         }
     #endregion
     }
