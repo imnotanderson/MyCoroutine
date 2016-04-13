@@ -54,7 +54,7 @@ public static class MyCoroutine
 
             public void Upt()
             {
-                if (go == null)
+                if (go == null || go.ToString()=="null")
                 {
                     die = true;
                     return;
