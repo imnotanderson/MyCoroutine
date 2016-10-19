@@ -97,6 +97,10 @@ public static class MyCoroutine
             for (int i = 0; i < dataList.Count; i++)
             {
                 var data = dataList[i];
+                if (data.die)
+                {
+                    continue;
+                }
                 data.Upt();
                 dataList[i] = data;
             }
