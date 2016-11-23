@@ -2,10 +2,21 @@ using UnityEngine;
 using System.Collections;
 using System;
 using System.Collections.Generic;
-
+using System.Reflection;
 
 public static class MyCoroutine
 {
+    static IEnumerator DelayAction(float delayTime,Action action)
+    {
+        yield return delayTime;
+        action();
+    }
+
+    public static int StartDelayAction(this GameObject go,float delayTime,Action action)
+    {
+        return go.StartContinueCoroutine(DelayAction(delayTime, action));
+    }
+
     public static int StartContinueCoroutine(this GameObject go, IEnumerator ie)
     {
         if (GameMain.IsPlaying == false) return 0;
@@ -25,7 +36,20 @@ public static class MyCoroutine
     }
 
     #region mono
-   class MyCoroutineMono : MonoBehaviour
+    static FieldInfo _WaitForSencondField = null;
+    static FieldInfo WaitForSencondField
+    {
+        get
+        {
+            if (_WaitForSencondField == null)
+            {
+                _WaitForSencondField = typeof(WaitForSeconds).GetField("m_Seconds", BindingFlags.Instance | BindingFlags.NonPublic);
+            }
+            return _WaitForSencondField;
+        }
+    }
+
+    class MyCoroutineMono : MonoBehaviour
     {
         public static MyCoroutineMono instance
         {
@@ -33,6 +57,10 @@ public static class MyCoroutine
             {
                 if (m == null)
                 {
+                    if (!GameMain.IsPlaying)
+                    {
+                        return null;
+                    }
                     var go = new GameObject("[MY_COROUTINE]");
                     m = go.AddComponent<MyCoroutineMono>();
                     DontDestroyOnLoad(go);
@@ -54,7 +82,7 @@ public static class MyCoroutine
 
             public void Upt()
             {
-                if (go == null || go.ToString()=="null")
+                if (go == null || go.ToString() == "null")
                 {
                     die = true;
                     return;
@@ -82,6 +110,10 @@ public static class MyCoroutine
                 else if (obj is int)
                 {
                     delayTime = (int)obj;
+                }
+                else if (obj is WaitForSeconds)
+                {
+                    delayTime = (float)WaitForSencondField.GetValue(obj);
                 }
             }
 
@@ -154,6 +186,7 @@ public static class MyCoroutine
                 if (data.go == go)
                 {
                     data.die = true;
+                    dataList[i] = data;
                 }
             }
         }
