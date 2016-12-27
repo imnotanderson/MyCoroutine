@@ -3,16 +3,23 @@ using System.Collections;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Diagnostics;
 
 public static class MyCoroutine
 {
-    static IEnumerator DelayAction(float delayTime,Action action)
+    public static void Init(int maxFrameIntervalMs) {
+        MAX_FRAME_INTERVAL_MS = maxFrameIntervalMs;
+        MyCoroutineMono.Init();
+    }
+
+    public static int MAX_FRAME_INTERVAL_MS = 0;
+    static IEnumerator DelayAction(float delayTime, Action action)
     {
         yield return delayTime;
         action();
     }
 
-    public static int StartDelayAction(this GameObject go,float delayTime,Action action)
+    public static int StartDelayAction(this GameObject go, float delayTime, Action action)
     {
         return go.StartContinueCoroutine(DelayAction(delayTime, action));
     }
@@ -55,23 +62,36 @@ public static class MyCoroutine
         {
             get
             {
-                if (m == null)
+                if (isInit == false)
                 {
-                    if (!GameMain.IsPlaying)
-                    {
-                        return null;
-                    }
-                    var go = new GameObject("[MY_COROUTINE]");
-                    m = go.AddComponent<MyCoroutineMono>();
-                    DontDestroyOnLoad(go);
+                    Init();
                 }
                 return m;
             }
         }
         static MyCoroutineMono m;
+        static bool isInit;
+        static object mLock = new object();
 
+        public static void Init() {
+            if (!GameMain.IsPlaying)
+            {
+                return;
+            }
+            lock (mLock)
+            {
+                if (isInit == true) return;
+                var go = new GameObject("[MY_COROUTINE]");
+                m = go.AddComponent<MyCoroutineMono>();
+                isInit = true;
+                DontDestroyOnLoad(go);
+            }
+        }
+        public bool printLog = false;
+        Stopwatch sw = new Stopwatch();
         int coroutineId = 0;
         int coroutineCount = 0;
+
         struct Data
         {
             public bool die;
@@ -122,12 +142,37 @@ public static class MyCoroutine
                 return go && go.activeInHierarchy;
             }
         }
+        List<Data> dataBufferList = new List<Data>();
         List<Data> dataList = new List<Data>();
+        bool checkBuffer = false;
+        bool checkData = false;
 
         void Update()
         {
+            if (checkBuffer == false && checkData == false) return;
+            if (dataBufferList.Count > 0)
+            {
+                lock (dataBufferList)
+                {
+                    dataList.AddRange(dataBufferList);
+                    dataBufferList.Clear();
+                    checkBuffer = false;
+                }
+                checkData = true;
+            }
+            sw.Reset();
+            sw.Start();
+
             for (int i = 0; i < dataList.Count; i++)
             {
+                if (MAX_FRAME_INTERVAL_MS>0 && sw.ElapsedMilliseconds > MAX_FRAME_INTERVAL_MS)
+                {
+                    if (printLog)
+                    {
+                        UnityEngine.Debug.Log("=========>sw.ElapsedMilliseconds > MAX_FRAME_INTERVAL_MS: loopCount:" + i + "/" + dataList.Count);
+                    }
+                    break;
+                }
                 var data = dataList[i];
                 if (data.die)
                 {
@@ -147,7 +192,7 @@ public static class MyCoroutine
 
             if (dataList.Count == 0)
             {
-                enabled = false;
+                checkData = false;
             }
             coroutineCount = dataList.Count;
         }
@@ -159,13 +204,21 @@ public static class MyCoroutine
             da.ie = ie;
             da.go = go;
             da.id = id;
-            dataList.Add(da);
-            enabled = true;
+            lock (dataBufferList)
+            {
+                dataBufferList.Add(da);
+                checkBuffer = true;
+            }
             return id;
         }
 
         public void StopMyCoroutineById(int id)
         {
+            lock (dataBufferList)
+            {
+                dataList.AddRange(dataBufferList);
+                dataBufferList.Clear();
+            }
             for (int i = 0; i < dataList.Count; i++)
             {
                 var data = dataList[i];
@@ -180,6 +233,11 @@ public static class MyCoroutine
 
         public void StopMyCoroutineByGo(GameObject go)
         {
+            lock (dataBufferList)
+            {
+                dataList.AddRange(dataBufferList);
+                dataBufferList.Clear();
+            }
             for (int i = 0; i < dataList.Count; i++)
             {
                 var data = dataList[i];
@@ -191,7 +249,7 @@ public static class MyCoroutine
             }
         }
 
-        int getId() 
+        int getId()
         {
             return coroutineId++;
         }
@@ -200,6 +258,6 @@ public static class MyCoroutine
         {
             return coroutineCount;
         }
-    #endregion
+        #endregion
     }
 }
